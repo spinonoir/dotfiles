@@ -1,0 +1,266 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+# Constants
+DOTFILES_DIR="$HOME/.dotfiles"
+NVIM_CONFIG_DIR="$HOME/.config/nvim"
+VERSION="0.1.0"
+
+# Color codes
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m'
+
+# Logging functions
+log_info() { echo -e "${GREEN}[INFO]${NC} $1"; }
+log_warn() { echo -e "${YELLOW}[WARN]${NC} $1"; }
+log_error() { echo -e "${RED}[ERROR]${NC} $1"; }
+log_debug() { if [[ "${DOT_DEBUG:-}" == "1" ]]; then echo -e "${BLUE}[DEBUG]${NC} $1"; fi; }
+
+# Help message
+show_help() {
+    cat << EOF
+Usage: dot <command> [options]
+
+A minimal dotfiles management tool (Neovim-focused version).
+
+Commands:
+  init         Initialize dotfiles repository
+    --minimal    Install minimal configuration
+  
+  install      Install tools and configurations
+    nvim        Install Neovim configuration
+    
+  config       Manage configurations
+    edit        Edit configuration files
+    show        Show current configuration
+  
+  update       Update tools and configurations
+    nvim        Update Neovim configuration
+    
+  doctor       Run diagnostics and fix common issues
+
+Options:
+  -h, --help     Show this help message
+  -v, --version  Show version information
+  --debug        Enable debug output
+  --no-color     Disable color output
+
+Examples:
+  dot init                # Initialize dotfiles
+  dot install nvim       # Install Neovim configuration
+  dot config edit nvim   # Edit Neovim configuration
+EOF
+}
+
+# Version information
+show_version() {
+    echo "dot version $VERSION"
+}
+
+# Check for required dependencies
+check_dependencies() {
+    local missing_deps=()
+    
+    # Required dependencies
+    local deps=("git" "curl" "nvim")
+    
+    for dep in "${deps[@]}"; do
+        if ! command -v "$dep" >/dev/null 2>&1; then
+            missing_deps+=("$dep")
+        fi
+    done
+    
+    if [ ${#missing_deps[@]} -ne 0 ]; then
+        log_error "Missing required dependencies: ${missing_deps[*]}"
+        echo "Please install these dependencies and try again."
+        exit 1
+    fi
+}
+
+# Initialize dotfiles repository
+cmd_init() {
+    local minimal=0
+    
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --minimal) minimal=1 ;;
+            *) log_error "Unknown option: $1"; return 1 ;;
+        esac
+        shift
+    done
+    
+    log_info "Initializing dotfiles..."
+    
+    # Create directory structure
+    mkdir -p "$DOTFILES_DIR"/{config,local}
+    
+    # Create Neovim config directory
+    mkdir -p "$DOTFILES_DIR/config/nvim"
+    
+    # Initialize git repository if needed
+    if [[ ! -d "$DOTFILES_DIR/.git" ]]; then
+        git init "$DOTFILES_DIR"
+    fi
+    
+    log_info "Initialization complete!"
+}
+
+# Install Neovim configuration
+cmd_install_nvim() {
+    log_info "Installing Neovim configuration..."
+    
+    # Backup existing config
+    if [[ -d "$NVIM_CONFIG_DIR" ]]; then
+        local backup_dir="$NVIM_CONFIG_DIR.backup.$(date +%Y%m%d_%H%M%S)"
+        log_info "Backing up existing configuration to $backup_dir"
+        mv "$NVIM_CONFIG_DIR" "$backup_dir"
+    fi
+    
+    # Create config directory
+    mkdir -p "$NVIM_CONFIG_DIR"
+    
+    # Copy configuration
+    cp -r "$DOTFILES_DIR/config/nvim/"* "$NVIM_CONFIG_DIR/"
+    
+    log_info "Neovim configuration installed successfully!"
+}
+
+# Edit configuration
+cmd_config_edit() {
+    local config="$1"
+    
+    case "$config" in
+        nvim)
+            ${EDITOR:-nvim} "$DOTFILES_DIR/config/nvim/init.lua"
+            ;;
+        *)
+            log_error "Unknown configuration: $config"
+            return 1
+            ;;
+    esac
+}
+
+# Show configuration
+cmd_config_show() {
+    local config="$1"
+    
+    case "$config" in
+        nvim)
+            cat "$DOTFILES_DIR/config/nvim/init.lua"
+            ;;
+        *)
+            log_error "Unknown configuration: $config"
+            return 1
+            ;;
+    esac
+}
+
+# Update configuration
+cmd_update_nvim() {
+    log_info "Updating Neovim configuration..."
+    cmd_install_nvim
+}
+
+# Run diagnostics
+cmd_doctor() {
+    log_info "Running diagnostics..."
+    
+    # Check dependencies
+    check_dependencies
+    
+    # Check Neovim configuration
+    if [[ ! -d "$NVIM_CONFIG_DIR" ]]; then
+        log_error "Neovim configuration not installed"
+    else
+        log_info "Neovim configuration found"
+    fi
+    
+    # Check Neovim health
+    log_info "Running Neovim health checks..."
+    nvim --headless -c "checkhealth" -c "quit"
+}
+
+# Placeholder functions for future expansion
+cmd_sync() { log_info "Sync functionality not implemented in this version"; }
+cmd_machine() { log_info "Machine management not implemented in this version"; }
+cmd_completion() { log_info "Shell completion not implemented in this version"; }
+
+# Main function
+main() {
+    # Parse global options
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            -h|--help)
+                show_help
+                return 0
+                ;;
+            -v|--version)
+                show_version
+                return 0
+                ;;
+            --debug)
+                export DOT_DEBUG=1
+                shift
+                ;;
+            --no-color)
+                RED=''
+                GREEN=''
+                YELLOW=''
+                BLUE=''
+                NC=''
+                shift
+                ;;
+            *)
+                break
+                ;;
+        esac
+    done
+    
+    # Ensure we have a command
+    if [[ $# -eq 0 ]]; then
+        show_help
+        return 1
+    fi
+    
+    # Get the command
+    local cmd="$1"
+    shift
+    
+    # Execute the command
+    case "$cmd" in
+        init)      cmd_init "$@" ;;
+        install)
+            case "${1:-}" in
+                nvim) cmd_install_nvim ;;
+                *) log_error "Unknown installation target: ${1:-}"; return 1 ;;
+            esac
+            ;;
+        config)
+            case "${1:-}" in
+                edit) cmd_config_edit "${2:-}" ;;
+                show) cmd_config_show "${2:-}" ;;
+                *) log_error "Unknown config command: ${1:-}"; return 1 ;;
+            esac
+            ;;
+        update)
+            case "${1:-}" in
+                nvim) cmd_update_nvim ;;
+                *) log_error "Unknown update target: ${1:-}"; return 1 ;;
+            esac
+            ;;
+        doctor)    cmd_doctor "$@" ;;
+        sync|machine|completion) 
+            log_info "Command '$cmd' not implemented in this version" ;;
+        *)
+            log_error "Unknown command: $cmd"
+            return 1
+            ;;
+    esac
+}
+
+# Execute main function with all arguments
+main "$@"
