@@ -111,14 +111,21 @@ install_lsp_servers() {
         return 1
     fi
     
+    # Update npm itself to latest version
+    npm install -g npm@latest
+    
     # Install/Update TypeScript LSP
     npm install -g typescript typescript-language-server
     
-    # Install/Update Lua LSP
-    npm install -g lua-language-server
-    
     # Install Python LSP
-    pip3 install --user --upgrade pyright
+    if command -v pip3 >/dev/null 2>&1; then
+        pip3 install --user --upgrade pyright
+    else
+        log_warn "pip3 not found. Installing Python LSP server skipped."
+    fi
+    
+    # Note about other LSP servers
+    log_info "Other LSP servers (Lua, etc.) will be installed automatically by Mason when you open Neovim."
 }
 
 # Setup dot command

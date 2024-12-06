@@ -296,8 +296,9 @@ main() {
                 *) log_error "Unknown update target: ${1:-}"; return 1 ;;
             esac
             ;;
+        sync)      cmd_sync "$@" ;;
         doctor)    cmd_doctor "$@" ;;
-        sync|machine|completion) 
+        machine|completion) 
             log_info "Command '$cmd' not implemented in this version" ;;
         *)
             log_error "Unknown command: $cmd"
