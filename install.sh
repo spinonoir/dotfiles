@@ -33,24 +33,36 @@ detect_os() {
     fi
 }
 
-# Install dependencies based on OS
+# Install or update dependencies based on OS
 install_dependencies() {
     local os=$1
     
-    log_info "Installing dependencies for $os..."
+    log_info "Installing/updating dependencies for $os..."
     
     case "$os" in
         macos)
             if ! command -v brew >/dev/null 2>&1; then
                 log_info "Installing Homebrew..."
                 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+            else
+                log_info "Updating Homebrew..."
+                brew update
             fi
             
-            brew install neovim git curl ripgrep fd
+            # Install/Update packages
+            brew install neovim git curl ripgrep fd || brew upgrade neovim git curl ripgrep fd
             ;;
         ubuntu)
             sudo apt-get update
-            sudo apt-get install -y neovim git curl ripgrep fd-find
+            sudo apt-get install -y neovim git curl
+            
+            # Install/Update ripgrep and fd-find if not latest
+            if ! command -v rg >/dev/null 2>&1; then
+                sudo apt-get install -y ripgrep
+            fi
+            if ! command -v fdfind >/dev/null 2>&1; then
+                sudo apt-get install -y fd-find
+            fi
             ;;
         *)
             log_error "Unsupported operating system: $os"
@@ -59,38 +71,62 @@ install_dependencies() {
     esac
 }
 
-# Install Node.js (required for LSP)
+# Install/Update Node.js (required for LSP)
 install_nodejs() {
     local os=$1
     
-    if ! command -v node >/dev/null 2>&1; then
-        log_info "Installing Node.js..."
-        
-        case "$os" in
-            macos)
+    log_info "Checking Node.js installation..."
+    
+    case "$os" in
+        macos)
+            if ! command -v node >/dev/null 2>&1; then
+                log_info "Installing Node.js..."
                 brew install node
-                ;;
-            ubuntu)
+            else
+                log_info "Updating Node.js..."
+                brew upgrade node
+            fi
+            ;;
+        ubuntu)
+            if ! command -v node >/dev/null 2>&1; then
+                log_info "Installing Node.js..."
                 curl -fsSL https://deb.nodesource.com/setup_lts.x | sudo -E bash -
                 sudo apt-get install -y nodejs
-                ;;
-        esac
-    fi
+            else
+                log_info "Updating Node.js..."
+                sudo apt-get update
+                sudo apt-get install -y nodejs
+            fi
+            ;;
+    esac
 }
 
-# Main installation
-main() {
-    local os
-    os=$(detect_os)
+# Install/Update LSP servers
+install_lsp_servers() {
+    log_info "Installing/updating LSP servers..."
     
-    log_info "Starting installation for OS: $os"
+    # Ensure npm is available
+    if ! command -v npm >/dev/null 2>&1; then
+        log_error "npm not found. Please ensure Node.js is installed correctly."
+        return 1
+    fi
     
-    # Create bin directory
+    # Install/Update TypeScript LSP
+    npm install -g typescript typescript-language-server
+    
+    # Install/Update Lua LSP
+    npm install -g lua-language-server
+    
+    # Install Python LSP
+    pip3 install --user --upgrade pyright
+}
+
+# Setup dot command
+setup_dot_command() {
+    log_info "Setting up dot command..."
+    
+    # Create bin directory if it doesn't exist
     mkdir -p "$BIN_DIR"
-    
-    # Install dependencies
-    install_dependencies "$os"
-    install_nodejs "$os"
     
     # Copy dot script to bin directory
     cp "$DOTFILES_DIR/bin/dot" "$BIN_DIR/dot"
@@ -102,9 +138,34 @@ main() {
         echo 'export PATH="$HOME/.local/bin:$PATH"' >> "$HOME/.bashrc"
         export PATH="$HOME/.local/bin:$PATH"
     fi
+}
+
+# Main installation
+main() {
+    local os
+    os=$(detect_os)
     
-    log_info "Installation complete!"
-    log_info "Please run 'dot init' to initialize your dotfiles."
+    log_info "Starting installation/update for OS: $os"
+    
+    # Install/Update system dependencies
+    install_dependencies "$os"
+    install_nodejs "$os"
+    
+    # Install/Update LSP servers
+    install_lsp_servers
+    
+    # Setup dot command
+    setup_dot_command
+    
+    # Initialize or update dotfiles
+    if [[ ! -d "$DOTFILES_DIR" ]]; then
+        log_info "First time setup - please run 'dot init' to initialize your dotfiles."
+    else
+        log_info "Running sync to update configuration..."
+        "$BIN_DIR/dot" sync
+    fi
+    
+    log_info "Installation/update complete!"
 }
 
 # Run main function
