@@ -137,7 +137,7 @@ require("lazy").setup({
         'pyright',
         'rust_analyzer',
         'clangd',
-        'tsserver',
+        'typescript-language-server',
         'gopls',
       }
 

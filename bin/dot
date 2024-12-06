@@ -41,6 +41,9 @@ Commands:
   update       Update tools and configurations
     nvim        Update Neovim configuration
     
+  sync         Sync configurations with remote repository
+    [nvim]      Sync Neovim configuration (default if no target specified)
+    
   doctor       Run diagnostics and fix common issues
 
 Options:
@@ -184,8 +187,49 @@ cmd_doctor() {
     nvim --headless -c "checkhealth" -c "quit"
 }
 
+# Sync functionality
+cmd_sync() {
+    local target="${1:-}"
+    
+    # Ensure we're in a git repository
+    if [[ ! -d "$DOTFILES_DIR/.git" ]]; then
+        log_error "Not a git repository: $DOTFILES_DIR"
+        return 1
+    fi
+    
+    # Change to dotfiles directory
+    cd "$DOTFILES_DIR"
+    
+    # Stash any local changes
+    if [[ -n "$(git status --porcelain)" ]]; then
+        log_info "Stashing local changes..."
+        git stash
+    fi
+    
+    # Pull latest changes
+    log_info "Pulling latest changes..."
+    git pull origin main
+    
+    # Pop stashed changes if any
+    if [[ -n "$(git stash list)" ]]; then
+        log_info "Restoring local changes..."
+        git stash pop
+    fi
+    
+    # Update configurations based on target
+    case "$target" in
+        "" | "nvim")
+            log_info "Updating Neovim configuration..."
+            cmd_install_nvim
+            ;;
+        *)
+            log_error "Unknown sync target: $target"
+            return 1
+            ;;
+    esac
+}
+
 # Placeholder functions for future expansion
-cmd_sync() { log_info "Sync functionality not implemented in this version"; }
 cmd_machine() { log_info "Machine management not implemented in this version"; }
 cmd_completion() { log_info "Shell completion not implemented in this version"; }
 
